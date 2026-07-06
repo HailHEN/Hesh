@@ -49,7 +49,7 @@ test:go:
   image: golang:1.26.4-alpine
   script:
     - cd hesh-core/
-    - go test -v -race ./...
+    - CGO_ENABLED=1 go test -v -race ./...
 
 # Build
 # using Kaniko for security (don't need Docker Daemon running)
