@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # Build a static, lightweight binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o /hesh-core-service ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o /hesh-core-service ./cmd/server/main.go
 
 # minimal runtime to run core service
 FROM alpine:3.20
