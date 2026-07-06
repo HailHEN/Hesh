@@ -112,24 +112,6 @@ CREATE TABLE transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE applied_rewards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    
-    -- It can be a custom item from reward_perks OR a directly redeemable store product
-    reward_perk_id UUID REFERENCES reward_perks(id) ON DELETE SET NULL,
-    store_product_id UUID REFERENCES store_products(id) ON DELETE SET NULL,
-    
-    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    points_deducted_per_unit INT NOT NULL CHECK (points_deducted_per_unit >= 0),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Safety check: Ensure at least one reference is populated
-    CONSTRAINT check_reward_source CHECK (reward_perk_id IS NOT NULL OR store_product_id IS NOT NULL)
-);
--- quickly finds all applied_rewards of a transaction (multiple rewards can be redeemed or used in a single transaction)
-CREATE INDEX idx_applied_rewards_tx ON applied_rewards(transaction_id);
-
 
 -- qucikly finds all transactions of a store 
 CREATE INDEX idx_transactions_store ON transactions(store_id);
@@ -215,8 +197,40 @@ CREATE TABLE reward_perks (
 );
 
 
+CREATE TABLE applied_rewards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    
+    -- It can be a custom item from reward_perks OR a directly redeemable store product
+    reward_perk_id UUID REFERENCES reward_perks(id) ON DELETE SET NULL,
+    store_product_id UUID REFERENCES store_products(id) ON DELETE SET NULL,
+    
+    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    points_deducted_per_unit INT NOT NULL CHECK (points_deducted_per_unit >= 0),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Safety check: Ensure at least one reference is populated
+    CONSTRAINT check_reward_source CHECK (reward_perk_id IS NOT NULL OR store_product_id IS NOT NULL)
+);
+
+
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_store_addresses_modtime BEFORE UPDATE ON store_addresses FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER update_store_products_modtime BEFORE UPDATE ON store_products FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER update_network_balances_modtime BEFORE UPDATE ON network_balances FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+-- quickly finds all applied_rewards of a transaction (multiple rewards can be redeemed or used in a single transaction)
+CREATE INDEX idx_applied_rewards_tx ON applied_rewards(transaction_id);
+
 -- quick serach on all the point programs given the merchant
 CREATE INDEX idx_rewards_merchant ON point_programs(merchant_id);
 -- quick serach of all merchants campaigns  
 CREATE INDEX idx_campaigns_merchant ON marketing_campaigns(merchant_id);
-CREATE INDEX idx_reward_perks_program ON core.reward_perks(point_program_id) WHERE is_active = TRUE;
+CREATE INDEX idx_reward_perks_program ON reward_perks(point_program_id) WHERE is_active = TRUE;
