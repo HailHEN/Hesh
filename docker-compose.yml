@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Create postgres database container
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: hesh_core_db
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d hesh_core_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    volumes:
+    # default postgres location 
+      - hesh_database:/var/lib/postgresql/data
+
+  # go-migration runner
+  migrate-core:
+    image: golang-migrate/migrate
+    volumes:
+      - ./hesh-core/db/migrations:/migrations
+    command: 
+      -path=/migrations 
+      -database "postgres://admin:password@postgres:5432/hesh_core_db?sslmode=disable" 
+      up
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  hesh-core-app:
+    build:
+      context: ./hesh-core    # looks for dockerfile
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=password
+      - DB_NAME=hesh_core_db
+    depends_on: # prevents core service from starting before database is ready. For now, it is just limited to database.
+      postgres:
+        condition: service_healthy
+      migrate-core:
+        condition: service_completed_successfully
+
+volumes:
+  hesh_database:
+    driver: local

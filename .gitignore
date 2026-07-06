@@ -1,0 +1,76 @@
+# ==============================================================================
+# Go (Golang)
+# ==============================================================================
+# Compiled binaries and local execution artifacts
+bin/
+out/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test coverage output
+*.out
+*.test
+coverage.txt
+
+# Dependency directories
+# vendor/
+
+# ==============================================================================
+# Docker
+# ==============================================================================
+# Ignore local docker-compose overrides or experimental configs
+*docker-compose.override.yml
+
+# Docker build contexts or temporary build logs
+.dockerignore
+!/.dockerignore
+
+# ==============================================================================
+# PostgreSQL, Databases & Migrations
+# ==============================================================================
+# Local volume directory where Docker mounts active PG data
+pgdata/
+postgres-data/
+
+# Block accidental raw SQL dumps, database backups, or temporary log files
+*.sql.gz
+*.sql.bak
+*.tmp
+*.log
+
+# CRITICAL: Explicitly ensure your change-based migration files are ALWAYS tracked, 
+# no matter how deep they are nested within your component directories.
+!**/db/migrations/*.sql
+
+# ==============================================================================
+# Environment Variables & Secrets (CRITICAL)
+# ==============================================================================
+# Never commit real credentials to git
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ==============================================================================
+# IDEs & System Files
+# ==============================================================================
+# JetBrains (GoLand, IntelliJ)
+.idea/
+*.iwb
+*.iws
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# OS generated files
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db

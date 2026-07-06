@@ -1,0 +1,66 @@
+stages:
+  - lint
+  - test
+  - build
+
+cache:
+  paths:
+    - .go-cache/
+    - /go/pkg/mod/
+
+variables:
+  GOPATH: "$CI_PROJECT_DIR/.go-cache"
+  GOLANGCI_LINT_VERSION: "v2.12" 
+
+# just doing some linting
+lint:go:
+  stage: lint
+
+  image: golangci/golangci-lint:${GOLANGCI_LINT_VERSION}
+  script:
+    - cd hesh-core/
+    - golangci-lint run --timeout 5m ./...
+
+lint:migrations:
+  stage: lint
+  image: alpine:3.19
+  script:
+    - echo "Validating database migration sequential naming formats..."
+    - |
+        do
+        filename=$(basename "$file")
+        if [[ ! $filename =~ ^[0-9]{6}_.+\.(up|down)\.sql$ ]]; then
+          echo "ERROR: Unrecognised migration filename found: $file"
+          echo "Expected format: XXXXXX_description.up.sql or XXXXXX_description.down.sql"
+          exit 1
+        fi
+      done
+      echo "Migration success"
+
+# testing
+test:go:
+  stage: test
+
+  image: golang:1.26.4-alpine
+  script:
+    - cd hesh-core/
+    - go test -v -race ./...
+
+# Build
+# using Kaniko for security (don't need Docker Daemon running)
+build:core-container:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.config
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" > /kaniko/.config/config.json
+    - >
+      /kaniko/executor
+      --context $CI_PROJECT_DIR/hesh-core
+      --dockerfile $CI_PROJECT_DIR/hesh-core/Dockerfile
+      --destination $CI_REGISTRY_IMAGE/hesh-core:$CI_COMMIT_REF_SLUG
+      --destination $CI_REGISTRY_IMAGE/hesh-core:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
