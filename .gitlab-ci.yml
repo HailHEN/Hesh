@@ -16,18 +16,19 @@ variables:
 lint:go:
   stage: lint
 
-  image: golangci/golangci-lint:${GOLANGCI_LINT_VERSION}
+  image: golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine
   script:
     - cd hesh-core/
     - golangci-lint run --timeout 5m ./...
 
 lint:migrations:
   stage: lint
+
   image: alpine:3.19
   script:
     - echo "Validating database migration sequential naming formats..."
     - |
-        do
+      for file in $(find . -path "*/db/migrations/*" -name "*.sql"); do
         filename=$(basename "$file")
         if [[ ! $filename =~ ^[0-9]{6}_.+\.(up|down)\.sql$ ]]; then
           echo "ERROR: Unrecognised migration filename found: $file"
