@@ -3,9 +3,12 @@ package repository
 import (
     "context"
     "fmt"
+    "log"
+    "errors"
     "hesh-core/internal/domain"
     "github.com/jackc/pgx/v5"
     "github.com/jackc/pgx/v5/pgxpool"
+    
 )
 
 type PostgresTransactionRepository struct {
@@ -21,7 +24,12 @@ func (r *PostgresTransactionRepository) RecordPurchase(ctx context.Context, t *d
     if err != nil {
         return fmt.Errorf("unable to start transaction block: %w", err)
     }
-    defer tx.Rollback(ctx)
+    defer func() {
+        if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+            // Send it to your application logger instead of forcing it into your execution returns
+            log.Printf("WARN: database transaction rollback failed: %v", err)
+        }
+    }()
 
     txQuery := `
         INSERT INTO core.transactions (
@@ -64,7 +72,7 @@ func (r *PostgresTransactionRepository) RecordPurchase(ctx context.Context, t *d
         br := tx.SendBatch(ctx, batch)
         for i := 0; i < len(t.LineItems); i++ {
             if _, err := br.Exec(); err != nil {
-                br.Close()
+                _ = br.Close()
                 return fmt.Errorf("failed to insert line item %d: %w", i, err)
             }
         }
@@ -94,7 +102,7 @@ func (r *PostgresTransactionRepository) RecordPurchase(ctx context.Context, t *d
         br := tx.SendBatch(ctx, batch)
         for i := 0; i < len(t.AppliedRewards); i++ {
             if _, err := br.Exec(); err != nil {
-                br.Close()
+                _ = br.Close()
                 return fmt.Errorf("failed to insert applied reward %d: %w", i, err)
             }
         }

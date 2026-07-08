@@ -3,8 +3,11 @@ package repository
 import (
     "context"
     "fmt"
+    "log"
+    "errors"
     "hesh-core/internal/domain"
     "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/jackc/pgx/v5"
 )
 
 type PostgresMerchantRepository struct {
@@ -36,7 +39,12 @@ func (r *PostgresMerchantRepository) CreateStoreWithAddress(ctx context.Context,
     if err != nil {
         return fmt.Errorf("failed to start store transaction: %w", err)
     }
-    defer tx.Rollback(ctx)
+    defer func() {
+        if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+            // Send it to your application logger instead of forcing it into your execution returns
+            log.Printf("WARN: database transaction rollback failed: %v", err)
+        }
+    }()
 
     // Updated: explicitly tracking and setting the is_active status flag
     storeQuery := `
