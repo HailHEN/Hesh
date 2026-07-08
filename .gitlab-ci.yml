@@ -28,7 +28,7 @@ lint:migrations:
   script:
     - echo "Validating database migration sequential naming formats..."
     - |
-      for file in $(find . -path "*/db/migrations/*" -name "*.sql"); do
+      for file in $(find . -path "*/internal/db/migrations/*" -name "*.sql"); do
         filename=$(basename "$file")
         case "$filename" in
           [0-9][0-9][0-9][0-9][0-9][0-9]_*.up.sql|[0-9][0-9][0-9][0-9][0-9][0-9]_*.down.sql)

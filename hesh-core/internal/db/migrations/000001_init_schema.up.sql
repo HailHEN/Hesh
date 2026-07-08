@@ -9,6 +9,8 @@ CREATE TABLE merchant (
     business_phone VARCHAR(20) NOT NULL UNIQUE 
     CONSTRAINT valid_merchant_phone 
         CHECK (business_phone ~ '^\+[1-9]\d{6,14}$'), 
+    business_abn VARCHAR(11) NOT NULL UNIQUE
+    CONSTRAINT valid_abn_length CHECK (business_abn ~ '^\d{11}$'),
     business_description VARCHAR(255) NOT NULL,
     pos_provider VARCHAR(50) NOT NULL,
     pos_merchant_id VARCHAR(255) NOT NULL UNIQUE,
@@ -19,6 +21,8 @@ CREATE TABLE store (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     merchant_id UUID NOT NULL REFERENCES merchant(id) ON DELETE CASCADE,
     store_name VARCHAR(255) NOT NULL,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     
     store_phone VARCHAR(20) CONSTRAINT valid_store_phone CHECK (store_phone ~ '^\+[1-9]\d{6,14}$'),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -51,6 +55,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     phone_number VARCHAR(20) NOT NULL UNIQUE 
         CONSTRAINT valid_user_phone CHECK (phone_number ~ '^\+[1-9]\d{6,14}$'),
+    email VARCHAR(255) UNIQUE DEFAULT NULL,
     wallet_token VARCHAR(255) UNIQUE, -- Used for Apple/Google Wallet push notifications
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -72,13 +77,15 @@ CREATE TABLE marketing_campaigns (
     merchant_id UUID NOT NULL REFERENCES merchant(id) ON DELETE CASCADE,
     -- Optional: link to a specific store if it's a localized promo
     store_id UUID REFERENCES store(id) ON DELETE CASCADE, 
+
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     
     campaign_name VARCHAR(255) NOT NULL,        -- e.g., "Surry Hills Winter Warm-up"
     message_body TEXT NOT NULL,                 -- The copy sent to the user
 
-    channel VARCHAR(20)[] NOT NULL 
+    channels VARCHAR(20)[] NOT NULL 
     CONSTRAINT valid_campaign_channels 
-    CHECK (channel <@ ARRAY['sms', 'wallet_push', 'email']::VARCHAR[]),           -- 'wallet_push', 'sms', 'in_app'
+    CHECK (channels <@ ARRAY['sms', 'wallet_push', 'email']::VARCHAR[]),           -- 'wallet_push', 'sms', 'in_app'
     
     -- AI Targeting: WHO gets it?
     -- e.g., {"suburb": "Surry Hills", "days_since_last_visit": 30}
@@ -99,17 +106,18 @@ CREATE TABLE marketing_campaigns (
 -- all transactions made via reward service
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pos_transaction_id VARCHAR(255) NOT NULL UNIQUE, 
-    merchant_id UUID NOT NULL REFERENCES merchant(id),
-    store_id UUID NOT NULL REFERENCES store(id), 
-    user_id UUID NOT NULL REFERENCES users(id),
-    applied_campaign_id UUID REFERENCES marketing_campaigns(id) ON DELETE SET NULL,
+    pos_transaction_id VARCHAR(255) NOT NULL, 
+    merchant_id UUID NOT NULL REFERENCES merchant(id) ON DELETE RESTRICT,
+    store_id UUID REFERENCES store(id) ON DELETE SET NULL, 
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    applied_campaign_id UUID REFERENCES marketing_campaigns(id) ON DELETE RESTRICT,
     total_amount NUMERIC(10, 2) NOT NULL, 
     points_earned INT NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
     points_spent INT NOT NULL DEFAULT 0 CHECK (points_spent >= 0),
     currency VARCHAR(3) NOT NULL DEFAULT 'AUD',
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_merchant_pos_tx UNIQUE (merchant_id, pos_transaction_id)
 );
 
 
@@ -157,7 +165,8 @@ CREATE TABLE store_products(
     is_redeemable BOOLEAN NOT NULL DEFAULT FALSE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_store_sku UNIQUE (store_id, sku)
 
 );
 -- quick search on all the product for a given store
@@ -202,8 +211,8 @@ CREATE TABLE applied_rewards (
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     
     -- It can be a custom item from reward_perks OR a directly redeemable store product
-    reward_perk_id UUID REFERENCES reward_perks(id) ON DELETE SET NULL,
-    store_product_id UUID REFERENCES store_products(id) ON DELETE SET NULL,
+    reward_perk_id UUID REFERENCES reward_perks(id) ON DELETE RESTRICT,
+    store_product_id UUID REFERENCES store_products(id) ON DELETE RESTRICT,
     
     quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     points_deducted_per_unit INT NOT NULL CHECK (points_deducted_per_unit >= 0),
@@ -234,3 +243,9 @@ CREATE INDEX idx_rewards_merchant ON point_programs(merchant_id);
 -- quick serach of all merchants campaigns  
 CREATE INDEX idx_campaigns_merchant ON marketing_campaigns(merchant_id);
 CREATE INDEX idx_reward_perks_program ON reward_perks(point_program_id) WHERE is_active = TRUE;
+
+-- can you use merchant id and timestamp for search. But obviously merchant id alone will be used more often
+CREATE INDEX idx_transactions_merchant_date ON transactions(merchant_id, timestamp DESC);
+-- makes deleting line item in a transaction quick. Look at foreign key (transaction_ID) on DELETE CASCADE rule. If a transaction is deleted. 
+-- This speeds that process of deleting its line items.
+CREATE INDEX idx_line_items_tx ON line_items(transaction_id);

@@ -11,7 +11,7 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root -d hesh_core_db"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d hesh_core_db"]
       interval: 3s
       timeout: 3s
       retries: 5
@@ -23,7 +23,7 @@ services:
   migrate-core:
     image: golang-migrate/migrate
     volumes:
-      - ./hesh-core/db/migrations:/migrations
+      - ./hesh-core/internal/db/migrations:/migrations
     command: 
       -path=/migrations 
       -database "postgres://admin:password@postgres:5432/hesh_core_db?sslmode=disable" 
@@ -39,11 +39,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=admin
-      - DB_PASSWORD=password
-      - DB_NAME=hesh_core_db
+      - DATABASE_URL=postgres://admin:password@postgres:5432/hesh_core_db?sslmode=disable
     depends_on: # prevents core service from starting before database is ready. For now, it is just limited to database.
       postgres:
         condition: service_healthy
